@@ -1,0 +1,448 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "launch EMR"
+Parameters:
+  EMRName:
+    Description: "EMR Cluster name should represent team and project. It must be unique within an AWS account."
+    Type: String
+    MinLength: 5
+    MaxLength: 63
+    AllowedPattern: "[a-zA-Z0-9][a-zA-Z0-9-]*"
+    ConstraintDescription: "EMR Name must only contain upper and lower case letters, numbers and '-'"
+  EMRInstanceKey:
+    Description: "Key to use with EC2 instances of EMR Cluster. Used for SSH access to master. If required, create key pair using EC2-> NETWORK & SECURITY -> key pair."
+    Type: AWS::EC2::KeyPair::KeyName
+  EMRS3LogPath:
+    Description: "EMR stores logs in this S3 location, e.g. s3://abc/logs/emr"
+    Type: String
+  S3Certspath:
+    Description: "S3 Certs location, to be used for TLS in transit encryption"
+    Type: String
+  # Below has defaults
+  Rolename:
+    Description: "Application Role Name. Don't enter ARN. Application on EMR cluster inherits privilages of the role via instance profile."
+    Type: String
+    AllowedPattern: "[a-zA-Z0-9][a-zA-Z0-9-]*"
+    ConstraintDescription: "Role Name must only contain upper and lower case letters, numbers and '-'"
+    Default: "ToBeDerived"
+  EmrServiceRole:
+    Description: "Service Role Name. Don't enter ARN."
+    Type: String
+    AllowedPattern: "[a-zA-Z0-9][a-zA-Z0-9-]*"
+    ConstraintDescription: "Role Name must only contain upper and lower case letters, numbers and '-'"
+    Default: "ToBeDerived"
+  EMRMasterSlaveSG:
+    Description: "Security Group to attache with EMR slave (core/task) nodes."
+    Type: String
+    Default: 'ToBeDerived'
+  EMRSubnetId:
+    Type: String
+    Description: TBD.
+    Default: 'ToBeDerived'
+  EMRVersion:
+    Description: "Select EMR version. Only limited versions are supported for Hive meta store compatibility."
+    Type: String
+    Default: "emr-5.27.0"
+    MinLength: 5
+    AllowedValues:
+      - emr-5.27.0
+      - emr-5.26.0
+      - emr-5.24.0
+  MasterInstanceType:
+    Description: "Select Master instance type. Default is m4.large."
+    Type: String
+    Default: "m4.large"
+    AllowedValues:
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m4.16xlarge
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - p2.xlarge
+      - p2.8xlarge
+      - p2.16xlarge
+      - p3.2xlarge
+      - p3.8xlarge
+      - p3.16xlarge
+  MasterEbsVolumeSizeGB:
+    Description: "Enter Master EBS volume size in GB. Default is 16 and Min is 10."
+    Type: Number
+    Default: 16
+    MinValue: 10
+  CoreInstanceType:
+    Description: "Select Core instance type. Default is m4.large."
+    Type: String
+    Default: "m4.large"
+    AllowedValues:
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m4.16xlarge
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - p2.xlarge
+      - p2.8xlarge
+      - p2.16xlarge
+      - p3.2xlarge
+      - p3.8xlarge
+      - p3.16xlarge
+  CoreInstanceCount:
+    Description: "Enter number of Core instances (worker nodes). Default is 1 and  Min is 1."
+    Type: Number
+    Default: 1
+    MinValue: 1
+  CoreEbsVolumeSizeGB:
+    Description: "Enter Core EBS volume size in GB. Default is 40 and Min is 10."
+    Type: Number
+    Default: 40
+    MinValue: 10
+  EMRKMSKey:
+    Description: "KMS key ARN for EMR storage volume encryption. Provisioning team provides this info."
+    Type: String
+    Default: 'ToBeDerived'
+  S3KMSKey:
+    Description: "KMS Key ARN for S3 Transparent Data Encryption.  Provisioning team provides this info."
+    Type: String
+    Default: 'ToBeDerived'
+  Application1:
+    Description: "Application to install on EMR Cluster. Hadoop,Hive,Pig,Spark will be installed by default"
+    Type: String
+    Default: ''
+  Application2:
+    Description: "Application to install on EMR Cluster. Hadoop,Hive,Pig,Spark will be installed by default"
+    Type: String
+    Default: ''
+  Application3:
+    Description: "Application to install on EMR Cluster. Hadoop,Hive,Pig,Spark will be installed by default"
+    Type: String
+    Default: ''
+  Application4:
+    Description: "Application to install on EMR Cluster. Hadoop,Hive,Pig,Spark will be installed by default"
+    Type: String
+    Default: ''
+  Application5:
+    Description: "Application to install on EMR Cluster. Hadoop,Hive,Pig,Spark will be installed by default"
+    Type: String
+    Default: ''
+  BootstrapPath1:
+    Description: "Specify S3 path to shell script, e.g. s3://idl-xyz-dev/script.sh"
+    Type: String
+    Default: ''
+  BootstrapArgs1:
+    Description: "Arguments to pass to Boot Strap action."
+    Type: String
+    Default: ''
+  BootstrapPath2:
+    Description: "Specify S3 path to shell script, e.g. s3://idl-xyz-dev/script.sh"
+    Type: String
+    Default: ''
+  BootstrapArgs2:
+    Description: "Arguments to pass to Boot Strap action."
+    Type: String
+    Default: ''
+  Configurations:
+    Description: "Enter list of EMR software configuration as JSON string. Use it to configure hite-site, core-site, EMRFS etc."
+    Type: String
+    Default: ''
+    MaxLength: 2147483647
+Resources:
+  GetValues:
+    Type: 'Custom::Transformer'
+    Properties:
+      ServiceToken: !GetAtt
+        - GetValuesFunction
+        - Arn
+      EMRSubnetId: !Ref EMRSubnetId
+      Rolename: !Ref Rolename
+      EmrServiceRole: !Ref EmrServiceRole
+      EMRMasterSlaveSG: !Ref EMRMasterSlaveSG
+      EMRKMSKey: !Ref EMRKMSKey
+      S3KMSKey: !Ref S3KMSKey
+      ConfigurationString: !Ref Configurations
+  GetValuesFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: "Function must be called from CloudFormation. Accepts CloudFormation export name and returns value"
+      Code:
+        ZipFile: |
+          import json
+          from botocore.vendored import requests
+          import boto3
+          import traceback
+          import secrets
+          def send_response(event, context, response_status, response_data=None, no_echo=False, reason=None):
+            response_body = dict()
+            response_body['Status'] = response_status
+            if reason is None:
+              response_body['Reason'] = 'See CloudWatch Log Stream: ' + context.log_stream_name
+            else:
+              response_body['Reason'] = reason + ' - More info in CloudWatch Log Stream: ' + context.log_stream_name
+            if 'PhysicalResourceId' in event:
+              response_body['PhysicalResourceId'] = event['PhysicalResourceId']
+            else:
+              response_body['PhysicalResourceId'] = context.log_stream_name
+            response_body['StackId'] = event['StackId']
+            response_body['RequestId'] = event['RequestId']
+            response_body['LogicalResourceId'] = event['LogicalResourceId']
+            response_body['NoEcho'] = no_echo
+            response_body['Data'] = response_data
+            json_response_body = json.dumps(response_body)
+            print("Response body:\n" + json_response_body)
+            try:
+              response = requests.put(event['ResponseURL'],
+                                        data=json_response_body,
+                                        headers={'content-type': '', 'content-length': str(len(json_response_body))})
+              print("Response Status code: " + response.reason)
+            except Exception as e:
+              print("send(..) failed executing requests.put(..): " + str(e))
+
+          def get_ssm_value(param_key, default_value=None):
+              client = boto3.client('ssm')
+              try:
+                  response = client.get_parameter(
+                      Name=param_key
+                  )
+                  param_value = response['Parameter']['Value']
+              except Exception as e:
+                  if default_value is None:
+                      raise "failed with error: " + str(e)
+                  else:
+                      param_value = default_value
+              return param_value
+
+          def lambda_handler(event, context):
+            data = {}
+            if event['RequestType'] == 'Delete':
+              send_response(event, context, 'SUCCESS')
+              return
+            try:
+              subnet = event['ResourceProperties']['EMRSubnetId']
+              role_name = event['ResourceProperties']['Rolename']
+              emr_service_role = event['ResourceProperties']['EmrServiceRole']
+              emr_sg = event['ResourceProperties']['EMRMasterSlaveSG']
+              emr_kms_key = event['ResourceProperties']['EMRKMSKey']
+              s3_kms_key = event['ResourceProperties']['S3KMSKey']
+              config_string = event['ResourceProperties']['ConfigurationString']
+              ## exports variables begin
+              exp_subnet = get_ssm_value('/test/emr/private_subnet') if subnet == 'ToBeDerived' else subnet
+              exp_role_name = get_ssm_value('/test/emr/default_emr_ec2_role') if role_name == 'ToBeDerived' else role_name
+              exp_emr_service_role = get_ssm_value('/test/emr/default_emr_service_role') if emr_service_role == 'ToBeDerived' else emr_service_role
+              exp_emr_sg = get_ssm_value('/test/emr/master_slave_sg') if emr_sg == 'ToBeDerived' else emr_sg
+              exp_emr_service_sg = get_ssm_value('/test/emr/service_access_sg') if emr_sg == 'ToBeDerived' else emr_service_sg
+              exp_emr_kms_key = get_ssm_value('/test/emr/kms') if emr_kms_key == 'ToBeDerived' else emr_kms_key
+              exp_s3_kms_key = get_ssm_value('/test/emr/kms') if s3_kms_key == 'ToBeDerived' else s3_kms_key
+              exp_config_object = json.loads(config_string) if config_string else []
+            except Exception:
+              send_response(event, context, 'FAILED', reason=traceback.format_exc())
+              return
+
+            data['exp_subnet'] = exp_subnet
+            data = {'exp_subnet': exp_subnet, 'exp_role_name': exp_role_name, 'exp_emr_service_role': exp_emr_service_role, 'exp_emr_sg': exp_emr_sg,
+                    'exp_emr_service_sg':exp_emr_service_sg, 'exp_emr_kms_key': exp_emr_kms_key, 'exp_s3_kms_key': exp_s3_kms_key, 'exp_config_object': exp_config_object}
+            send_response(event, context, 'SUCCESS', data)
+      Handler: index.lambda_handler
+      Runtime: python3.6
+      Timeout: 300
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/lambda-PowerUser'
+  emrSecurityConfig:
+    Type: 'AWS::EMR::SecurityConfiguration'
+    Properties:
+      Name: !Sub "emrSecurityConfig-${EMRName}"
+      SecurityConfiguration:
+        EncryptionConfiguration:
+          EnableInTransitEncryption: true
+          InTransitEncryptionConfiguration:
+            TLSCertificateConfiguration:
+              CertificateProviderType: PEM
+              S3Object: !Ref S3Certspath
+          EnableAtRestEncryption: true
+          AtRestEncryptionConfiguration:
+            S3EncryptionConfiguration:
+              EncryptionMode: SSE-KMS
+              AwsKmsKey: !Sub
+                - 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${ExpEmrKms}'
+                - { ExpEmrKms: !GetAtt GetValues.exp_s3_kms_key }
+            LocalDiskEncryptionConfiguration:
+              EncryptionKeyProviderType: AwsKms
+              AwsKmsKey: !Sub
+                - 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${ExpEmrKms}'
+                - { ExpEmrKms: !GetAtt GetValues.exp_emr_kms_key }
+              EnableEbsEncryption: true
+  LaunchEMRCluster:
+    Type: "AWS::EMR::Cluster"
+    DependsOn : [emrSecurityConfig, GetValuesFunction]
+    Properties:
+      Name: !Ref EMRName
+#      CustomAmiId: !Ref CustomAmiId
+      Configurations: !GetAtt GetValues.exp_config_object
+      Applications:
+        - Name: Hadoop
+        - Name: Hive
+        - Name: Pig
+        - Name: Spark
+        - !If [HasApplication1, Name: !Ref Application1, !Ref 'AWS::NoValue']
+        - !If [HasApplication2, Name: !Ref Application2, !Ref 'AWS::NoValue']
+        - !If [HasApplication3, Name: !Ref Application3, !Ref 'AWS::NoValue']
+        - !If [HasApplication4, Name: !Ref Application4, !Ref 'AWS::NoValue']
+        - !If [HasApplication5, Name: !Ref Application5, !Ref 'AWS::NoValue']
+      ReleaseLabel: !Ref EMRVersion
+      BootstrapActions:
+        - !If
+          - HasBootstrap1
+          - !If
+            - HasBootstrapArgs1
+            - Name: UserBootstrap1
+              ScriptBootstrapAction:
+                Path: !Ref BootstrapPath1
+                Args:
+                  - !Ref BootstrapArgs1
+            - Name: UserBootstrap1
+              ScriptBootstrapAction:
+                Path: !Ref BootstrapPath1
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HasBootstrap2
+          - !If
+            - HasBootstrapArgs2
+            - Name: UserBootstrap2
+              ScriptBootstrapAction:
+                Path: !Ref BootstrapPath2
+                Args:
+                  - !Ref BootstrapArgs2
+            - Name: UserBootstrap2
+              ScriptBootstrapAction:
+                Path: !Ref BootstrapPath2
+          - !Ref 'AWS::NoValue'
+      Instances:
+        Ec2KeyName: !Ref EMRInstanceKey
+        EmrManagedMasterSecurityGroup: !GetAtt GetValues.exp_emr_sg
+        EmrManagedSlaveSecurityGroup: !GetAtt GetValues.exp_emr_sg
+        ServiceAccessSecurityGroup: !GetAtt GetValues.exp_emr_service_sg
+        MasterInstanceGroup:
+          InstanceCount: 1
+          InstanceType: !Ref MasterInstanceType
+          Market: "ON_DEMAND"
+          Name: "Master"
+          EbsConfiguration:
+            EbsBlockDeviceConfigs:
+              - VolumeSpecification:
+                  SizeInGB: !Ref MasterEbsVolumeSizeGB
+                  VolumeType: gp2
+            EbsOptimized: true
+        CoreInstanceGroup:
+          InstanceCount:
+            Ref: CoreInstanceCount
+          InstanceType:
+            Ref: CoreInstanceType
+          Market: "ON_DEMAND"
+          Name: "Core"
+          EbsConfiguration:
+            EbsBlockDeviceConfigs:
+              - VolumeSpecification:
+                  SizeInGB: !Ref CoreEbsVolumeSizeGB
+                  VolumeType: gp2
+            EbsOptimized: true
+        Ec2SubnetId: !GetAtt GetValues.exp_subnet
+        TerminationProtected: false
+      JobFlowRole: !GetAtt GetValues.exp_role_name
+      ServiceRole: !GetAtt GetValues.exp_emr_service_role
+      VisibleToAllUsers: true
+      LogUri: !Ref EMRS3LogPath
+      SecurityConfiguration: !Ref emrSecurityConfig
+      Tags:
+        - Key: CfStackName
+          Value: !Ref AWS::StackName
+        - Key: EmrVersion
+          Value: !Ref EMRVersion
+Conditions:
+  HasNot: !Equals [ 'true', 'false' ]
+  HasApplication1: !Not [!Equals ['', !Ref Application1]]
+  HasApplication2: !Not [!Equals ['', !Ref Application2]]
+  HasApplication3: !Not [!Equals ['', !Ref Application3]]
+  HasApplication4: !Not [!Equals ['', !Ref Application4]]
+  HasApplication5: !Not [!Equals ['', !Ref Application5]]
+  HasBootstrap1: !Not [!Equals ['', !Ref BootstrapPath1]]
+  HasBootstrapArgs1: !Not [!Equals ['', !Ref BootstrapArgs1]]
+  HasBootstrap2: !Not [!Equals ['', !Ref BootstrapPath2]]
+  HasBootstrapArgs2: !Not [!Equals ['', !Ref BootstrapArgs2]]
+Outputs:
+  EMRDNSName:
+    Description: The DNSName of the EMR
+    Value: !GetAtt LaunchEMRCluster.MasterPublicDNS
+  EMRId:
+    Description: The EMR ID
+    Value: !Ref LaunchEMRCluster
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Mandatory parameters"
+        Parameters:
+          - EMRName
+          - EMRInstanceKey
+          - EMRS3LogPath
+      -
+        Label:
+          default: "Optional parameters: Roles vpc and security groups"
+        Parameters:
+          - Rolename
+          - EmrServiceRole
+          - EMRMasterSlaveSG
+          - EMRSubnetId
+      -
+        Label:
+          default: "Optional parameters: EMR additional configuration"
+        Parameters:
+          - EMRVersion
+          - MasterInstanceType
+          - MasterEbsVolumeSizeGB
+          - CoreInstanceType
+          - CoreInstanceCount
+          - CoreEbsVolumeSizeGB
+          - Configurations
+      -
+        Label:
+          default: "Optional parameters: EMR Security Configuration"
+        Parameters:
+          - EMRKMSKey
+          - S3KMSKey
+          - SSLCert
+      -
+        Label:
+          default: "Optional parameters: EMR Applications. Hadoop, Hive, Pig, Spark will come by defaults "
+        Parameters:
+          - Application1
+          - Application2
+          - Application3
+          - Application4
+          - Application5
+      -
+        Label:
+          default: "Optional parameters: Custom Bootsraps and configs "
+        Parameters:
+          - BootstrapPath1
+          - BootstrapArgs1
+          - BootstrapPath2
+          - BootstrapArgs2

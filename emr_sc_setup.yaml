@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Deploys a service catalog portfolio"
+Parameters:
+  PortfolioArnToAssociate:
+    Type: String
+#    Default: 'arn:aws:iam::084267254492:role/Admin'
+    Default: !Sub 'arn:aws:iam::${AWS::AccountId}:role/Admin'
+  ServiceCatalogPortfolioName:
+    Type: String
+    Default: 'emr-sc-blog-portfolio'
+  ServiceCatalogProductName:
+    Type: String
+    Default: 'emr-sc-blog-product'
+  ArtifactS3Bucket:
+    Type: String
+  ArtifactName:
+    Type: String
+    Default: create_emr.yaml
+Resources :
+  ServiceCatalogPortfolio:
+    Type: AWS::ServiceCatalog::Portfolio
+    Properties :
+      Description : 'Test ServiceCatalog Portfolio'
+      DisplayName : !Ref ServiceCatalogPortfolioName
+      ProviderName : 'Dummy team'
+      Tags :
+        -
+          Key: "keyname1"
+          Value: "value1"
+  PortfolioPrincipalAssociation:
+    Type: AWS::ServiceCatalog::PortfolioPrincipalAssociation
+    Properties :
+      PortfolioId : !Ref ServiceCatalogPortfolio
+      PrincipalARN : !Ref PortfolioArnToAssociate
+      PrincipalType : IAM
+# 2
+  ServiceCatalogProduct:
+    Type: AWS::ServiceCatalog::CloudFormationProduct
+    Properties :
+      Description : 'Dummy product'
+      Distributor : 'Team name'
+      Name : !Ref ServiceCatalogProductName
+      Owner : 'Dummy Owner'
+      ProvisioningArtifactParameters :
+        -
+          Description: "Deploys sample EMR with customisation"
+          Name : 'v1'
+          Info:
+            LoadTemplateFromURL: !Sub "https://s3-${AWS::Region}.amazonaws.com/${ArtifactS3Bucket}/${ArtifactName}"
+      SupportDescription : 'Dummy Description'
+      SupportEmail : 'supp-email@dummy.com'
+      SupportUrl : 'http://dummy-url'
+      Tags :
+        -
+          Key: "keyname1"
+          Value: "value1"
+  PortfolioProductAssociation:
+    Type: AWS::ServiceCatalog::PortfolioProductAssociation
+    Properties :
+      PortfolioId : !Ref ServiceCatalogPortfolio
+      ProductId : !Ref ServiceCatalogProduct
+# 3
+  TestEmrLaunchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: "emr-sc-blog-launch-role"
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - servicecatalog.amazonaws.com
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AWSLambdaFullAccess
+      - arn:aws:iam::aws:policy/AWSDataPipeline_PowerUser
+      - arn:aws:iam::aws:policy/AmazonElasticMapReduceFullAccess
+      - arn:aws:iam::aws:policy/AWSServiceCatalogEndUserFullAccess
+  AttachLaunchConstraint:
+    Type: "AWS::ServiceCatalog::LaunchRoleConstraint"
+    Properties:
+      Description: "Attach Launch Constraint to the product"
+      PortfolioId: !Ref ServiceCatalogPortfolio
+      ProductId: !Ref ServiceCatalogProduct
+      RoleArn: !GetAtt TestEmrLaunchRole.Arn
